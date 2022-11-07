@@ -15,7 +15,6 @@ namespace utils
 	}
 }
 
-
 void Renderer::OnResize(uint32_t width, uint32_t height)
 {
 	if (m_FinalImage)
@@ -61,7 +60,7 @@ glm::vec4 Renderer::perpixel(uint32_t x, uint32_t y)
 	glm::vec3 _color(0.0f);
 	float multiplier = 1.0f;
 
-	int bounces = 1;
+	int bounces = 2;
 	for (int i = 0; i != bounces; i++)
 	{
 
@@ -76,14 +75,18 @@ glm::vec4 Renderer::perpixel(uint32_t x, uint32_t y)
 
 		//首先计算亮度
 		//光源，和0比较大小确定颜色的亮度
-		glm::vec3 lightDir = glm::vec3{ 1,1,1 };
+		glm::vec3 lightDir = glm::normalize((glm::vec3{ 1,1,1 }));
 		float lightDesinty = glm::max(glm::dot(payload.normal, lightDir), 0.0f);
 
 		//确定这次反射得到的颜色
-		_color += multiplier * lightDesinty * m_activescene->Spheres[payload.index].Albedo;
+		//_color += multiplier * lightDesinty * m_activescene->Spheres[payload.index].Albedo;
 
+		const Sphere& sphere = m_activescene->Spheres[payload.index];
+		glm::vec3 sphereColor = sphere.Albedo;
+		sphereColor *= lightDesinty;
+		_color += sphereColor * multiplier;
 		//光线每次折射都会衰减
-		multiplier *= 1;
+		multiplier *= 0.7;
 
 		//重新计算下一条光线的起始点和方向
 		ray.Origin = payload.position;
@@ -116,7 +119,7 @@ hitpload Renderer::TracRay(const Ray& ray)
 
 		float hitdistance = (-b - glm::sqrt(dis)) / (2.0f * a);
 
-		if(hitdistance<closestDistance)
+		if(hitdistance>0.0f&&hitdistance<closestDistance)//
 		{
 			closestDistance = hitdistance;
 			closesSphere = (int)i;
