@@ -30,8 +30,8 @@ public:
 
 		{
 			Sphere _sphere;
-			_sphere.Position = { 0.0f,-1.0f,0.0f };
-			_sphere.Radius = 0.5f;
+			_sphere.Position = { 0.0f,-101.0f,0.0f };
+			_sphere.Radius = 100.0f;
 			_sphere.Albedo = { 0.0f,1.0f,0.5f };
 			m_scene.Spheres.push_back(_sphere);
 		}

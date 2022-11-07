@@ -37,17 +37,14 @@ void Renderer::OnResize(uint32_t width, uint32_t height)
 
 void Renderer::render(const Scene& _scene, const Camera& _camera)
 {
-	Ray ray;
-	ray.Origin = _camera.GetPosition();
+	m_activecamera = &_camera;
+	m_activescene = &_scene;
 
 	for (uint32_t y = 0; y < m_FinalImage->GetHeight(); y++)
 	{
 		for (uint32_t x = 0; x < m_FinalImage->GetWidth(); x++)
 		{
-			ray.Direction = _camera.GetRayDirections()[x + y * m_FinalImage->GetWidth()];
-
-			glm::vec4 color = perpixel(_scene,ray);
-
+			glm::vec4 color = perpixel(x, y);
 			color = glm::clamp(color, glm::vec4(0.0f), glm::vec4(1.0f));
 			m_imageData[x + y * m_FinalImage->GetWidth()] = utils::ConvertToRGBA(color);
 		}
@@ -55,53 +52,100 @@ void Renderer::render(const Scene& _scene, const Camera& _camera)
 	m_FinalImage->SetData(m_imageData);
 }
 
-glm::vec4 Renderer::perpixel(const Scene& _scene, const Ray& ray)
+glm::vec4 Renderer::perpixel(uint32_t x, uint32_t y)
 {
+	Ray ray;
+	ray.Origin = m_activecamera->GetPosition();
+	ray.Direction = m_activecamera->GetRayDirections()[x + y * m_FinalImage->GetWidth()];
+	
+	glm::vec3 _color(0.0f);
+	float multiplier = 1.0f;
 
+	int bounces = 1;
+	for (int i = 0; i != bounces; i++)
+	{
 
+		hitpload payload = TracRay(ray);
 
-	return glm::vec4{ 1.0f,0.0f,0.5f,1.0f };
+		if (payload.index < 0)
+		{
+			glm::vec3 skyColor = glm::vec3(0.6f, 0.7f, 0.9f);
+			_color += skyColor * multiplier;
+			break;
+		}
+
+		//首先计算亮度
+		//光源，和0比较大小确定颜色的亮度
+		glm::vec3 lightDir = glm::vec3{ 1,1,1 };
+		float lightDesinty = glm::max(glm::dot(payload.normal, lightDir), 0.0f);
+
+		//确定这次反射得到的颜色
+		_color += multiplier * lightDesinty * m_activescene->Spheres[payload.index].Albedo;
+
+		//光线每次折射都会衰减
+		multiplier *= 1;
+
+		//重新计算下一条光线的起始点和方向
+		ray.Origin = payload.position;
+		ray.Direction = glm::reflect(ray.Direction, payload.normal);
+
+	}
+
+	return glm::vec4{ _color,1.0f };
 }
 
-glm::vec4 Renderer::TracRay(const Scene& _scene, const Ray& ray)
+hitpload Renderer::TracRay(const Ray& ray)
 {
-	const Sphere* cloestP = nullptr;
+	int closesSphere = -1;
+
 	float closestDistance = std::numeric_limits<float>::max();
 
-	for (const Sphere& _sphere: _scene.Spheres)
+	for(int i=0;i< m_activescene->Spheres.size();i++)
 	{
-		glm::vec3 origin = ray.Origin - _sphere.Position;
+		const Sphere& cloestphere = m_activescene->Spheres[i];
+		glm::vec3 origin = ray.Origin - cloestphere.Position;
 
 		float a = glm::dot(ray.Direction, ray.Direction);
 		float b = 2.0f * glm::dot(origin, ray.Direction);
-		float c = glm::dot(origin, origin) - _sphere.Radius * _sphere.Radius;
+		float c = glm::dot(origin, origin) - cloestphere.Radius * cloestphere.Radius;
 
+		//判断是否与物体相交
 		float dis = b * b - 4.0f * a * c;
-
 		if(dis<0.0f)
 			continue;
 
-		float hitdistance= (-b - glm::sqrt(dis)) / (2.0f * a);
+		float hitdistance = (-b - glm::sqrt(dis)) / (2.0f * a);
 
 		if(hitdistance<closestDistance)
 		{
-			cloestP = &_sphere;
 			closestDistance = hitdistance;
+			closesSphere = (int)i;
 		}
 	}
+	//通过查看光线相交的最近物体判断是否有命中物体
+	hitpload p;
+	if (closesSphere < 0)
+		return	p;
 
-	if (cloestP == nullptr)
-		return glm::vec4{ 0.0f,0.0f,0.0f,1.0f };
+	return hitpoint(ray, closestDistance, closesSphere);
 
-	glm::vec3 origin = ray.Origin - cloestP->Position;
-	glm::vec3 normalvec = origin + closestDistance * ray.Direction;
-	glm::vec3 normal = glm::normalize(normalvec);
+}
 
-	glm::vec3 lightDir = glm::normalize(glm::vec3(1, 1, 1));
-	float lightIntensity = glm::max(glm::dot(lightDir, normal), 0.0f);
+hitpload Renderer::hitpoint(const Ray& ray, float distance,int _index)
+{
+	hitpload pay;
+	pay.hitdistance = distance;
+	
+	const Sphere& spy = m_activescene->Spheres[_index];
+	
+	glm::vec3 origin = ray.Origin - spy.Position;
+	pay.position = origin + ray.Direction * distance;
+	pay.normal = glm::normalize(pay.position);
 
-	glm::vec3 color = cloestP->Albedo;
-	color *= lightIntensity;
-	return glm::vec4{ color,1.0f };
+	pay.position += spy.Position;
 
+	pay.hitdistance = distance;
+	pay.index = _index;
+
+	return pay;
 }
